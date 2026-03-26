@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Text Highlight</title>
+    <link rel="stylesheet" href="popup.css">
+  </head>
+  <body>
+    <main class="popup">
+      <h1 class="title">文本高亮</h1>
+      <p class="hint">每行输入一条规则。普通文本会按字符串匹配，`/表达式/flags` 会按正则匹配；反斜杠请直接输入单个 `\`。</p>
+      <label class="label" for="terms">高亮规则</label>
+      <textarea
+        id="terms"
+        class="textarea"
+        placeholder="例如：&#10;OpenAI&#10;/Chrome\s+插件/i&#10;/高亮|标记/g"
+      ></textarea>
+      <div class="actions">
+        <button id="highlightButton" class="button button-primary" type="button">开始高亮</button>
+        <button id="clearButton" class="button button-secondary" type="button">清除高亮</button>
+      </div>
+      <p id="status" class="status" aria-live="polite"></p>
+    </main>
+    <script src="popup.js"></script>
+  </body>
+</html>
