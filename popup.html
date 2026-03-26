@@ -9,16 +9,42 @@
   <body>
     <main class="popup">
       <h1 class="title">文本高亮</h1>
-      <p class="hint">每行输入一条规则。普通文本会按字符串匹配，`/表达式/flags` 会按正则匹配；反斜杠请直接输入单个 `\`。</p>
+      <p class="hint">每行输入一条规则。普通文本会按字符串匹配，`/表达式/flags` 会按正则匹配；反斜杠请直接输入单个 `\`。打开开关后会按当前规则自动高亮。</p>
       <label class="label" for="terms">高亮规则</label>
       <textarea
         id="terms"
         class="textarea"
         placeholder="例如：&#10;OpenAI&#10;/Chrome\s+插件/i&#10;/高亮|标记/g"
       ></textarea>
+      <div class="toggle-row">
+        <div class="toggle-copy">
+          <span class="label toggle-label">自动高亮</span>
+          <p class="toggle-hint">开启后会自动应用当前规则和样式</p>
+        </div>
+        <label class="switch" for="enabledToggle">
+          <input id="enabledToggle" class="switch-input" type="checkbox">
+          <span class="switch-slider"></span>
+        </label>
+      </div>
+      <section class="section">
+        <h2 class="section-title">高亮样式</h2>
+        <div class="style-grid">
+          <label class="style-control" for="backgroundColor">
+            <span class="label">背景色</span>
+            <input id="backgroundColor" class="color-input" type="color" value="#ffe066">
+          </label>
+          <label class="style-control" for="textColor">
+            <span class="label">文字色</span>
+            <input id="textColor" class="color-input" type="color" value="#1f2937">
+          </label>
+          <label class="style-control style-control-wide" for="borderRadius">
+            <span class="label">圆角</span>
+            <input id="borderRadius" class="number-input" type="number" min="0" max="16" step="1" value="2">
+          </label>
+        </div>
+      </section>
       <div class="actions">
-        <button id="highlightButton" class="button button-primary" type="button">开始高亮</button>
-        <button id="clearButton" class="button button-secondary" type="button">清除高亮</button>
+        <button id="clearButton" class="button button-secondary" type="button">清空规则</button>
       </div>
       <p id="status" class="status" aria-live="polite"></p>
     </main>

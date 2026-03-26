@@ -9,25 +9,67 @@ const BLOCKED_TAGS = new Set([
   "TEXTAREA"
 ]);
 const REGEX_FLAGS_PATTERN = /^[dgimsuvy]*$/;
+const REAPPLY_DELAY = 200;
+const DEFAULT_HIGHLIGHT_STYLE = {
+  backgroundColor: "#ffe066",
+  textColor: "#1f2937",
+  borderRadius: 2
+};
+let currentConfig = {
+  terms: [],
+  highlightStyle: DEFAULT_HIGHLIGHT_STYLE,
+  enabled: false
+};
+let mutationObserver = null;
+let reapplyTimer = 0;
 
-function ensureHighlightStyle() {
-  if (document.getElementById(HIGHLIGHT_STYLE_ID)) {
-    return;
+function isHexColor(value) {
+  return /^#[0-9a-fA-F]{6}$/.test(value);
+}
+
+function normalizeBorderRadius(value) {
+  const radius = Number.parseInt(value, 10);
+
+  if (!Number.isFinite(radius)) {
+    return DEFAULT_HIGHLIGHT_STYLE.borderRadius;
   }
 
-  const style = document.createElement("style");
-  style.id = HIGHLIGHT_STYLE_ID;
+  return Math.min(Math.max(radius, 0), 16);
+}
+
+function normalizeHighlightStyle(style) {
+  const source = style && typeof style === "object" ? style : {};
+
+  return {
+    backgroundColor: isHexColor(source.backgroundColor)
+      ? source.backgroundColor
+      : DEFAULT_HIGHLIGHT_STYLE.backgroundColor,
+    textColor: isHexColor(source.textColor)
+      ? source.textColor
+      : DEFAULT_HIGHLIGHT_STYLE.textColor,
+    borderRadius: normalizeBorderRadius(source.borderRadius)
+  };
+}
+
+function ensureHighlightStyle(highlightStyle) {
+  let style = document.getElementById(HIGHLIGHT_STYLE_ID);
+
+  if (!style) {
+    style = document.createElement("style");
+    style.id = HIGHLIGHT_STYLE_ID;
+    document.documentElement.append(style);
+  }
+
+  const normalizedStyle = normalizeHighlightStyle(highlightStyle);
   style.textContent = `
     .${HIGHLIGHT_CLASS} {
-      background: #ffe066;
-      color: inherit;
-      border-radius: 2px;
+      background: ${normalizedStyle.backgroundColor};
+      color: ${normalizedStyle.textColor};
+      border-radius: ${normalizedStyle.borderRadius}px;
       padding: 0 1px;
-      box-shadow: 0 0 0 1px rgba(217, 119, 6, 0.28);
+      box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.12);
     }
   `;
-
-  document.documentElement.append(style);
 }
 
 function escapeRegExp(value) {
@@ -101,6 +143,79 @@ function clearHighlights() {
   for (const parent of parents) {
     parent.normalize();
   }
+}
+
+function normalizeConfig(config) {
+  const source = config && typeof config === "object" ? config : {};
+
+  return {
+    terms: normalizeTerms(source.terms),
+    highlightStyle: normalizeHighlightStyle(source.highlightStyle),
+    enabled: Boolean(source.enabled)
+  };
+}
+
+function stopObserving() {
+  window.clearTimeout(reapplyTimer);
+
+  if (mutationObserver) {
+    mutationObserver.disconnect();
+    mutationObserver = null;
+  }
+}
+
+function applyCurrentConfig() {
+  stopObserving();
+
+  if (!currentConfig.enabled) {
+    clearHighlights();
+    return { count: 0 };
+  }
+
+  const result = applyHighlights(currentConfig.terms, currentConfig.highlightStyle);
+  startObserving();
+  return result;
+}
+
+function scheduleReapply() {
+  if (!currentConfig.enabled) {
+    return;
+  }
+
+  window.clearTimeout(reapplyTimer);
+  reapplyTimer = window.setTimeout(() => {
+    applyCurrentConfig();
+  }, REAPPLY_DELAY);
+}
+
+function startObserving() {
+  if (!currentConfig.enabled || mutationObserver || !document.documentElement) {
+    return;
+  }
+
+  mutationObserver = new MutationObserver((mutations) => {
+    for (const mutation of mutations) {
+      if (mutation.target instanceof Element && mutation.target.closest(`.${HIGHLIGHT_CLASS}`)) {
+        continue;
+      }
+
+      if (mutation.type === "characterData") {
+        scheduleReapply();
+        return;
+      }
+
+      if (mutation.addedNodes.length || mutation.removedNodes.length) {
+        scheduleReapply();
+        return;
+      }
+    }
+  });
+
+  mutationObserver.observe(document.documentElement, {
+    childList: true,
+    subtree: true,
+    characterData: true
+  });
 }
 
 function collectTextNodes() {
@@ -232,7 +347,7 @@ function highlightTextNode(node, patterns) {
   return matches.length;
 }
 
-function applyHighlights(terms) {
+function applyHighlights(terms, highlightStyle) {
   const normalizedTerms = normalizeTerms(terms);
   clearHighlights();
 
@@ -240,7 +355,7 @@ function applyHighlights(terms) {
     return { count: 0 };
   }
 
-  ensureHighlightStyle();
+  ensureHighlightStyle(highlightStyle);
   let patterns;
 
   try {
@@ -263,12 +378,22 @@ function applyHighlights(terms) {
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message?.type === "apply-highlights") {
-    sendResponse(applyHighlights(message.terms));
+    currentConfig = normalizeConfig({
+      terms: message.terms,
+      highlightStyle: message.highlightStyle,
+      enabled: true
+    });
+    sendResponse(applyCurrentConfig());
     return true;
   }
 
   if (message?.type === "clear-highlights") {
-    clearHighlights();
+    currentConfig = normalizeConfig({
+      terms: [],
+      highlightStyle: currentConfig.highlightStyle,
+      enabled: false
+    });
+    applyCurrentConfig();
     sendResponse({ count: 0 });
     return true;
   }
@@ -277,8 +402,27 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 chrome.storage.sync
-  .get({ terms: [] })
-  .then(({ terms }) => {
-    applyHighlights(terms);
+  .get({
+    terms: [],
+    highlightStyle: DEFAULT_HIGHLIGHT_STYLE,
+    enabled: false
+  })
+  .then(({ terms, highlightStyle, enabled }) => {
+    currentConfig = normalizeConfig({ terms, highlightStyle, enabled });
+    applyCurrentConfig();
   })
   .catch(() => {});
+
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName !== "sync") {
+    return;
+  }
+
+  currentConfig = normalizeConfig({
+    terms: changes.terms ? changes.terms.newValue : currentConfig.terms,
+    highlightStyle: changes.highlightStyle ? changes.highlightStyle.newValue : currentConfig.highlightStyle,
+    enabled: changes.enabled ? changes.enabled.newValue : currentConfig.enabled
+  });
+
+  applyCurrentConfig();
+});
