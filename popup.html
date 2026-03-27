@@ -10,6 +10,16 @@
     <main class="popup">
       <h1 class="title">Polarion 工步助手</h1>
       <p class="hint">插件会在 Polarion 工步页面右侧显示浮窗，用来切换工步并展示相对前序工步发生变化的信号。</p>
+      <label class="toggle" for="assistantEnabled">
+        <span class="toggle-copy">
+          <span class="toggle-title">启用插件</span>
+          <span class="toggle-text">关闭后当前页面不会显示工步助手浮窗。</span>
+        </span>
+        <span class="toggle-control">
+          <input id="assistantEnabled" class="toggle-input" type="checkbox" checked>
+          <span class="toggle-track" aria-hidden="true"></span>
+        </span>
+      </label>
       <label class="label" for="signalRegex">信号提取正则</label>
       <textarea
         id="signalRegex"

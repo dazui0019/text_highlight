@@ -1,8 +1,10 @@
 const signalRegexInput = document.querySelector("#signalRegex");
+const assistantEnabledInput = document.querySelector("#assistantEnabled");
 const statusText = document.querySelector("#status");
 const saveButton = document.querySelector("#saveButton");
 const resetButton = document.querySelector("#resetButton");
 const REGEX_FLAGS_PATTERN = /^[dgimsuvy]*$/;
+const DEFAULT_ASSISTANT_ENABLED = true;
 const DEFAULT_SIGNAL_REGEX = "([A-Za-z_][A-Za-z0-9_]*(?:\\s*\\/\\s*[A-Za-z_][A-Za-z0-9_]*)*)\\s*=+\\s*((?:0x[0-9A-Fa-f]+|\\d+)(?:\\s*\\/\\s*(?:0x[0-9A-Fa-f]+|\\d+))*)";
 
 function setStatus(message, isError = false) {
@@ -40,6 +42,10 @@ function normalizeSignalRegexSource(value) {
   return normalizedValue || DEFAULT_SIGNAL_REGEX;
 }
 
+function normalizeAssistantEnabled(value) {
+  return value !== false;
+}
+
 function validateSignalRegex(value) {
   const source = normalizeSignalRegexSource(value);
   const regexLiteral = parseRegexLiteral(source);
@@ -56,10 +62,15 @@ function validateSignalRegex(value) {
 }
 
 async function loadConfig() {
-  const { polarionSignalRegex = DEFAULT_SIGNAL_REGEX } = await chrome.storage.sync.get({
+  const {
+    polarionAssistantEnabled = DEFAULT_ASSISTANT_ENABLED,
+    polarionSignalRegex = DEFAULT_SIGNAL_REGEX
+  } = await chrome.storage.sync.get({
+    polarionAssistantEnabled: DEFAULT_ASSISTANT_ENABLED,
     polarionSignalRegex: DEFAULT_SIGNAL_REGEX
   });
 
+  assistantEnabledInput.checked = normalizeAssistantEnabled(polarionAssistantEnabled);
   signalRegexInput.value = normalizeSignalRegexSource(polarionSignalRegex);
 }
 
@@ -69,6 +80,19 @@ async function saveConfig(value) {
   signalRegexInput.value = source;
   setStatus("已保存，Polarion 页面上的工步助手会自动刷新。");
 }
+
+async function setAssistantEnabled(value) {
+  const enabled = normalizeAssistantEnabled(value);
+  await chrome.storage.sync.set({ polarionAssistantEnabled: enabled });
+  assistantEnabledInput.checked = enabled;
+  setStatus(enabled ? "插件已开启。" : "插件已关闭。");
+}
+
+assistantEnabledInput.addEventListener("change", () => {
+  setAssistantEnabled(assistantEnabledInput.checked).catch((error) => {
+    setStatus(error.message || "开关更新失败，请稍后重试。", true);
+  });
+});
 
 saveButton.addEventListener("click", () => {
   saveConfig(signalRegexInput.value).catch((error) => {

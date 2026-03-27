@@ -14,9 +14,11 @@ const POLARION_STEP_FALLBACK_REGEX = /^Step\s*:\s*(\d+)/i;
 const POLARION_DESCRIPTION_REGEX = /^Step Description\s*:\s*(.*)$/i;
 const POLARION_STOP_REGEX = /^(Expected Result|Actual Result|Step Verdict|Attachments?)\s*:/i;
 const REGEX_FLAGS_PATTERN = /^[dgimsuvy]*$/;
+const DEFAULT_ASSISTANT_ENABLED = true;
 const DEFAULT_SIGNAL_REGEX = "([A-Za-z_][A-Za-z0-9_]*(?:\\s*\\/\\s*[A-Za-z_][A-Za-z0-9_]*)*)\\s*=+\\s*((?:0x[0-9A-Fa-f]+|\\d+)(?:\\s*\\/\\s*(?:0x[0-9A-Fa-f]+|\\d+))*)";
 
 let panelState = {
+  assistantEnabled: DEFAULT_ASSISTANT_ENABLED,
   signalRegex: DEFAULT_SIGNAL_REGEX,
   steps: [],
   activeIndex: 0,
@@ -58,6 +60,10 @@ function normalizeFlags(flags) {
 function normalizeSignalRegexSource(value) {
   const normalizedValue = String(value ?? "").trim();
   return normalizedValue || DEFAULT_SIGNAL_REGEX;
+}
+
+function normalizeAssistantEnabled(value) {
+  return value !== false;
 }
 
 function compileSignalRegex(value) {
@@ -816,6 +822,11 @@ function refreshPanel() {
     return;
   }
 
+  if (!panelState.assistantEnabled) {
+    removePanel();
+    return;
+  }
+
   startObserver();
   const entries = collectTextEntries();
 
@@ -846,11 +857,13 @@ function initialize() {
     return;
   }
 
-  startObserver();
-
   chrome.storage.sync
-    .get({ polarionSignalRegex: DEFAULT_SIGNAL_REGEX })
-    .then(({ polarionSignalRegex }) => {
+    .get({
+      polarionAssistantEnabled: DEFAULT_ASSISTANT_ENABLED,
+      polarionSignalRegex: DEFAULT_SIGNAL_REGEX
+    })
+    .then(({ polarionAssistantEnabled, polarionSignalRegex }) => {
+      panelState.assistantEnabled = normalizeAssistantEnabled(polarionAssistantEnabled);
       panelState.signalRegex = normalizeSignalRegexSource(polarionSignalRegex);
       refreshPanel();
     })
@@ -864,8 +877,25 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
     return;
   }
 
+  let shouldRefresh = false;
+
+  if (changes.polarionAssistantEnabled) {
+    panelState.assistantEnabled = normalizeAssistantEnabled(changes.polarionAssistantEnabled.newValue);
+
+    if (!panelState.assistantEnabled) {
+      removePanel();
+      return;
+    }
+
+    shouldRefresh = true;
+  }
+
   if (changes.polarionSignalRegex) {
     panelState.signalRegex = normalizeSignalRegexSource(changes.polarionSignalRegex.newValue);
+    shouldRefresh = true;
+  }
+
+  if (shouldRefresh) {
     scheduleRefresh(0);
   }
 });
