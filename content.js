@@ -15,10 +15,18 @@ const POLARION_DESCRIPTION_REGEX = /^Step Description\s*:\s*(.*)$/i;
 const POLARION_STOP_REGEX = /^(Expected Result|Actual Result|Step Verdict|Attachments?)\s*:/i;
 const REGEX_FLAGS_PATTERN = /^[dgimsuvy]*$/;
 const DEFAULT_ASSISTANT_ENABLED = true;
+const DEFAULT_PROFILE_ID = "lamp-control";
+const DEFAULT_PROFILE_NAME = "LampControl";
+const FEATURE_LAMP_SIGNAL_DIFF = "lamp-signal-diff";
+const FEATURE_RESERVED = "reserved";
 const DEFAULT_SIGNAL_REGEX = "([A-Za-z_][A-Za-z0-9_]*(?:\\s*\\/\\s*[A-Za-z_][A-Za-z0-9_]*)*)\\s*=+\\s*((?:0x[0-9A-Fa-f]+|\\d+)(?:\\s*\\/\\s*(?:0x[0-9A-Fa-f]+|\\d+))*)";
 
 let panelState = {
   assistantEnabled: DEFAULT_ASSISTANT_ENABLED,
+  profiles: createDefaultProfiles(),
+  activeProfileId: DEFAULT_PROFILE_ID,
+  activeProfileName: DEFAULT_PROFILE_NAME,
+  activeProfileFeature: FEATURE_LAMP_SIGNAL_DIFF,
   signalRegex: DEFAULT_SIGNAL_REGEX,
   steps: [],
   activeIndex: 0,
@@ -64,6 +72,90 @@ function normalizeSignalRegexSource(value) {
 
 function normalizeAssistantEnabled(value) {
   return value !== false;
+}
+
+function createDefaultProfile() {
+  return {
+    id: DEFAULT_PROFILE_ID,
+    name: DEFAULT_PROFILE_NAME,
+    feature: FEATURE_LAMP_SIGNAL_DIFF,
+    signalRegex: DEFAULT_SIGNAL_REGEX
+  };
+}
+
+function createDefaultProfiles() {
+  return [createDefaultProfile()];
+}
+
+function normalizeProfileName(value, index) {
+  const normalizedValue = String(value ?? "").trim();
+  return normalizedValue || `配置${index + 1}`;
+}
+
+function inferProfileFeature(profile) {
+  const id = String(profile?.id ?? "").trim().toLowerCase();
+  const name = String(profile?.name ?? "").trim().toLowerCase();
+
+  if (id === DEFAULT_PROFILE_ID || name === DEFAULT_PROFILE_NAME.toLowerCase()) {
+    return FEATURE_LAMP_SIGNAL_DIFF;
+  }
+
+  return FEATURE_RESERVED;
+}
+
+function normalizeProfileFeature(value, profile) {
+  if (value === FEATURE_LAMP_SIGNAL_DIFF || value === FEATURE_RESERVED) {
+    return value;
+  }
+
+  return inferProfileFeature(profile);
+}
+
+function normalizeProfiles(value) {
+  if (!Array.isArray(value) || !value.length) {
+    return createDefaultProfiles();
+  }
+
+  const profiles = [];
+  const usedIds = new Set();
+
+  for (const [index, profile] of value.entries()) {
+    const baseId = String(profile?.id ?? "").trim() || `profile-${index + 1}`;
+    let id = baseId;
+    let suffix = 2;
+
+    while (usedIds.has(id)) {
+      id = `${baseId}-${suffix}`;
+      suffix += 1;
+    }
+
+    usedIds.add(id);
+    profiles.push({
+      id,
+      name: normalizeProfileName(profile?.name, index),
+      feature: normalizeProfileFeature(profile?.feature, profile),
+      signalRegex: normalizeSignalRegexSource(profile?.signalRegex)
+    });
+  }
+
+  return profiles.length ? profiles : createDefaultProfiles();
+}
+
+function resolveActiveProfile(profiles, activeProfileId) {
+  const normalizedId = String(activeProfileId ?? "").trim();
+  return profiles.find((profile) => profile.id === normalizedId) || profiles[0];
+}
+
+function syncActiveProfileState() {
+  const activeProfile = resolveActiveProfile(panelState.profiles, panelState.activeProfileId);
+  panelState.activeProfileId = activeProfile.id;
+  panelState.activeProfileName = activeProfile.name;
+  panelState.activeProfileFeature = activeProfile.feature;
+  panelState.signalRegex = activeProfile.signalRegex;
+}
+
+function isLampSignalProfile() {
+  return panelState.activeProfileFeature === FEATURE_LAMP_SIGNAL_DIFF;
 }
 
 function compileSignalRegex(value) {
@@ -327,6 +419,7 @@ function ensurePanel() {
   const status = root.querySelector(".psa-status");
   const summary = root.querySelector(".psa-summary");
   const signalList = root.querySelector(".psa-signal-list");
+  const subtitle = root.querySelector(".psa-subtitle");
 
   refreshButton.addEventListener("click", () => {
     scheduleRefresh(0);
@@ -350,6 +443,7 @@ function ensurePanel() {
     prevButton,
     nextButton,
     stepSelect,
+    subtitle,
     status,
     summary,
     signalList
@@ -362,6 +456,25 @@ function renderPanel() {
   const refs = ensurePanel();
 
   if (!refs) {
+    return;
+  }
+
+  refs.subtitle.textContent = isLampSignalProfile()
+    ? `${panelState.activeProfileName} · 工步切换与变化信号`
+    : `${panelState.activeProfileName} · 测试用例配置入口`;
+
+  if (!isLampSignalProfile()) {
+    refs.stepSelect.replaceChildren();
+    refs.stepSelect.disabled = true;
+    refs.prevButton.disabled = true;
+    refs.nextButton.disabled = true;
+    refs.status.classList.remove("is-error");
+    refs.status.textContent = "当前配置还没有绑定页面解析逻辑。";
+    refs.summary.textContent = `${panelState.activeProfileName} 目前只是独立配置入口位，后面可以扩展成这个测试用例自己的功能。`;
+    refs.signalList.replaceChildren();
+    refs.signalList.append(
+      createPanelElement("div", "psa-empty", "这个配置不会使用 LampControl 的正则提取逻辑。")
+    );
     return;
   }
 
@@ -827,6 +940,14 @@ function refreshPanel() {
     return;
   }
 
+  if (!isLampSignalProfile()) {
+    panelState.steps = [];
+    panelState.activeIndex = 0;
+    panelState.error = "";
+    renderPanel();
+    return;
+  }
+
   startObserver();
   const entries = collectTextEntries();
 
@@ -860,11 +981,14 @@ function initialize() {
   chrome.storage.sync
     .get({
       polarionAssistantEnabled: DEFAULT_ASSISTANT_ENABLED,
-      polarionSignalRegex: DEFAULT_SIGNAL_REGEX
+      polarionProfiles: createDefaultProfiles(),
+      polarionActiveProfileId: DEFAULT_PROFILE_ID
     })
-    .then(({ polarionAssistantEnabled, polarionSignalRegex }) => {
+    .then(({ polarionAssistantEnabled, polarionProfiles, polarionActiveProfileId }) => {
       panelState.assistantEnabled = normalizeAssistantEnabled(polarionAssistantEnabled);
-      panelState.signalRegex = normalizeSignalRegexSource(polarionSignalRegex);
+      panelState.profiles = normalizeProfiles(polarionProfiles);
+      panelState.activeProfileId = polarionActiveProfileId;
+      syncActiveProfileState();
       refreshPanel();
     })
     .catch(() => {
@@ -890,9 +1014,18 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
     shouldRefresh = true;
   }
 
-  if (changes.polarionSignalRegex) {
-    panelState.signalRegex = normalizeSignalRegexSource(changes.polarionSignalRegex.newValue);
+  if (changes.polarionProfiles) {
+    panelState.profiles = normalizeProfiles(changes.polarionProfiles.newValue);
     shouldRefresh = true;
+  }
+
+  if (changes.polarionActiveProfileId) {
+    panelState.activeProfileId = String(changes.polarionActiveProfileId.newValue ?? "").trim();
+    shouldRefresh = true;
+  }
+
+  if (changes.polarionProfiles || changes.polarionActiveProfileId) {
+    syncActiveProfileState();
   }
 
   if (shouldRefresh) {
