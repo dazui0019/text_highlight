@@ -1,17 +1,17 @@
 {
   "manifest_version": 3,
-  "name": "Text Highlight",
+  "name": "Polarion Step Assistant",
   "version": "1.0.0",
-  "description": "Highlight specific strings on webpages.",
-  "permissions": ["storage", "tabs", "scripting"],
-  "host_permissions": ["<all_urls>"],
+  "description": "Navigate Polarion steps and inspect changed signals.",
+  "permissions": ["storage"],
+  "host_permissions": ["*://*/polarion*"],
   "action": {
     "default_popup": "popup.html",
-    "default_title": "Text Highlight"
+    "default_title": "Polarion Step Assistant"
   },
   "content_scripts": [
     {
-      "matches": ["<all_urls>"],
+      "matches": ["*://*/polarion*"],
       "js": ["content.js"],
       "run_at": "document_idle"
     }
