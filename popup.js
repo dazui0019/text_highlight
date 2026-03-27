@@ -3,7 +3,7 @@ const statusText = document.querySelector("#status");
 const saveButton = document.querySelector("#saveButton");
 const resetButton = document.querySelector("#resetButton");
 const REGEX_FLAGS_PATTERN = /^[dgimsuvy]*$/;
-const DEFAULT_SIGNAL_REGEX = "([A-Za-z_][A-Za-z0-9_]*(?:\\s*\\/\\s*[A-Za-z_][A-Za-z0-9_]*)*)\\s*=\\s*([^\\s,，。；;]+)";
+const DEFAULT_SIGNAL_REGEX = "([A-Za-z_][A-Za-z0-9_]*(?:\\s*\\/\\s*[A-Za-z_][A-Za-z0-9_]*)*)\\s*=+\\s*((?:0x[0-9A-Fa-f]+|\\d+)(?:\\s*\\/\\s*(?:0x[0-9A-Fa-f]+|\\d+))*)";
 
 function setStatus(message, isError = false) {
   statusText.textContent = message;

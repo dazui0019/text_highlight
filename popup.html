@@ -15,7 +15,7 @@
         id="signalRegex"
         class="textarea"
         spellcheck="false"
-        placeholder="例如：&#10;([A-Za-z_][A-Za-z0-9_]*(?:\s*\/\s*[A-Za-z_][A-Za-z0-9_]*)*)\s*=\s*([^\s,，。；;]+)"
+        placeholder="例如：&#10;([A-Za-z_][A-Za-z0-9_]*(?:\s*\/\s*[A-Za-z_][A-Za-z0-9_]*)*)\s*=+\s*((?:0x[0-9A-Fa-f]+|\d+)(?:\s*\/\s*(?:0x[0-9A-Fa-f]+|\d+))*)"
       ></textarea>
       <p class="note">支持两种写法：原始正则，或 `/表达式/flags`。默认按前两组捕获提取“信号名”和“信号值”。</p>
       <div class="actions">

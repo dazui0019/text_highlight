@@ -14,7 +14,7 @@ const POLARION_STEP_FALLBACK_REGEX = /^Step\s*:\s*(\d+)/i;
 const POLARION_DESCRIPTION_REGEX = /^Step Description\s*:\s*(.*)$/i;
 const POLARION_STOP_REGEX = /^(Expected Result|Actual Result|Step Verdict|Attachments?)\s*:/i;
 const REGEX_FLAGS_PATTERN = /^[dgimsuvy]*$/;
-const DEFAULT_SIGNAL_REGEX = "([A-Za-z_][A-Za-z0-9_]*(?:\\s*\\/\\s*[A-Za-z_][A-Za-z0-9_]*)*)\\s*=\\s*([^\\s,，。；;]+)";
+const DEFAULT_SIGNAL_REGEX = "([A-Za-z_][A-Za-z0-9_]*(?:\\s*\\/\\s*[A-Za-z_][A-Za-z0-9_]*)*)\\s*=+\\s*((?:0x[0-9A-Fa-f]+|\\d+)(?:\\s*\\/\\s*(?:0x[0-9A-Fa-f]+|\\d+))*)";
 
 let panelState = {
   signalRegex: DEFAULT_SIGNAL_REGEX,
@@ -669,8 +669,7 @@ function readStepEntry(entries, index) {
   return null;
 }
 
-function collectSteps() {
-  const entries = collectTextEntries();
+function collectSteps(entries = collectTextEntries()) {
   const stepEntries = [];
 
   for (const [index] of entries.entries()) {
@@ -775,9 +774,9 @@ function extractSignalsFromText(text, regex) {
   return signalOrder.map((name) => signalsByName.get(name));
 }
 
-function buildStepData(signalRegexSource) {
+function buildStepData(signalRegexSource, entries) {
   const compiledRegex = compileSignalRegex(signalRegexSource);
-  const rawSteps = collectSteps();
+  const rawSteps = collectSteps(entries);
   const previousSignals = new Map();
   const steps = rawSteps.map((step) => {
     const signals = extractSignalsFromText(step.descriptionText, compiledRegex.regex);
@@ -818,10 +817,11 @@ function refreshPanel() {
   }
 
   startObserver();
+  const entries = collectTextEntries();
 
   const currentStep = panelState.steps[panelState.activeIndex];
   const preferredStepNumber = currentStep?.number;
-  const result = buildStepData(panelState.signalRegex);
+  const result = buildStepData(panelState.signalRegex, entries);
 
   panelState.signalRegex = result.signalRegex;
   panelState.steps = result.steps;
